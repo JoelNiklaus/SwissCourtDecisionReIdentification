@@ -25,6 +25,8 @@ search_queries = {
            "noticeNumber": r"n\.? della pubblicazione|n\.? di notificazione|pubblicazione simap n\.?"},
 }
 
+# TODO contractor auch rausholen bei re-identifizierung (beschwerdegegner)
+
 """
 Why are there so many more german relevant decisions than french ones?
 vielleicht entfernen Gerichtsschreiber die Meldungsnummer, Im Kanton Zürich bspw. werden Meldungsnummern des Amtblattes erwähnt
@@ -58,6 +60,7 @@ awards = prepare_awards()
 print(f"Our database of awards contains {len(awards.index)} entries")
 print(f"The median awarded price is {int(awards.price.median())}")
 print(f"There are {len(awards.bidder.unique())} unique bidders")
+print(f"There are {len(awards.contractor.unique())} unique contractors")
 
 
 def prepare_decisions(language: str):
@@ -99,6 +102,7 @@ def clean_awarded_df(awarded):
     return {
         "projectTitle": awarded.projectTitle.unique()[0],
         "bidders": awarded.bidder.tolist(),
+        "contractors": awarded.contractor.tolist(),
         "prices": awarded.price.tolist()
     }
     # columns = ['bidder', 'price', 'projectTitle']
@@ -135,9 +139,11 @@ re_identified['awards_found'] = re_identified.apply(
 re_identified['mean_price'] = re_identified.apply(
     lambda x: np.mean(x.awards_found['prices']) if x.awards_found else None, axis=1)
 
-# just take the first bidder for simplicity
+# just take the first bidder/contractor for simplicity
 re_identified['bidder'] = re_identified.apply(
     lambda x: x.awards_found['bidders'][0] if x.awards_found else None, axis=1)
+re_identified['contractor'] = re_identified.apply(
+    lambda x: x.awards_found['contractors'][0] if x.awards_found else None, axis=1)
 re_identified['projectTitle'] = re_identified.apply(
     lambda x: x.awards_found['projectTitle'] if x.awards_found else None, axis=1)
 
@@ -180,7 +186,9 @@ def make_report(re_identified: DataFrame, decisions: DataFrame, language: str):
 
     pprint(re_identification)
 
-    print(f"We re-identified decisions from the following courts: {re_identified_lang.court.unique()}")
+    print(f"We found decisions from the following courts: {decisions_lang.court.value_counts().to_json()}")
+    print(f"We found terms in decisions from the following courts: {terms_found_lang.court.value_counts().to_json()}")
+    print(f"We re-identified decisions from the following courts: {re_identified_lang.court.value_counts().to_json()}")
     bvge_percentage_total = len(decisions_lang[decisions_lang.court.str.contains("CH_BVGE")].index) / num_decisions
     bvge_percentage_terms_found = len(
         terms_found_lang[terms_found_lang.court.str.contains("CH_BVGE")].index) / num_terms_found
@@ -195,6 +203,7 @@ def make_report(re_identified: DataFrame, decisions: DataFrame, language: str):
     print(random_sample[['awards_found_by_projectID', 'awards_found_by_noticeNumber']])
 
     # draw violin plot for prices
+    # häufig rahmenverträge, müssen nicht alle Leistungen bezogen werden
     prices = re_identified_lang[re_identified_lang.mean_price > 0]
     fig = px.violin(prices, y="mean_price", box=True,  # draw box plot inside the violin
                     points='all',  # can be 'outliers', or False
