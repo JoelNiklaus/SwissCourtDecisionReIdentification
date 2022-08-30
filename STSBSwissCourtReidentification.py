@@ -67,7 +67,6 @@ trains_and_ships =  stsb_events('bahnen_und_schiffe.json')
 print(f"Our database of aviation events contains {len(aviation.index)} entries") 
 print(f"Our database of trains and ships events contains {len(trains_and_ships.index)} entries")
 
-
 #Converts date format from 26. 05. 2016 to 26. Mai 2016 based on decision languages. we need this to search it in decision text. 
 dic= {
     "de": {"January": "Januar",
@@ -143,11 +142,6 @@ aviation['location_list'] = aviation.apply(
 aviation['details_list'] = aviation.apply(
     lambda aviation: clean_data(aviation.details), axis=1)
 
-
-
-
-
-
 #Extraxt Time,pist and report numbers from content of events. I used these as indirect identifier. 
 reg_query ={
     "time": r'[0-9]{2}:[0-9]{2}:?[0-9]*',
@@ -173,10 +167,8 @@ def extraxt_content_identifier(content,reg):
     
 aviation['time_pattern'] = aviation.apply(
     lambda aviation: extraxt_content_identifier(aviation.content,reg_query["time"]), axis=1)
-
 aviation['pist_pattern'] = aviation.apply(
     lambda aviation: extraxt_content_identifier(aviation.content,reg_query["pist"]), axis=1)
-
 aviation['report_number_pattern'] = aviation.apply(
     lambda aviation: extraxt_content_identifier(aviation.content,reg_query["report_number"]), axis=1)
 
@@ -200,7 +192,6 @@ def get_identifiers(text,lang,file_id):
         score = 0
         kw = []
         id = row[1]["id"]  
-        
         date = row[1]["event_date"]
         date_key = convert_date(date,lang)
         loc = row[1]["location_list"]
@@ -218,12 +209,12 @@ def get_identifiers(text,lang,file_id):
         if  matched_loc is not None:
             score = len(matched_loc) * 1 + score
             kw.append(matched_loc)
-        
+
         matched_details =find_match(det,text)
         if  matched_details is not None:
             score = len(matched_details) * 2  + score
-            kw.append(matched_details)
-            
+            kw.append(matched_details)  
+
         if  report_number is not None:
             matched_report_number =find_match(report_number,text)
             if  matched_report_number is not None:
@@ -231,15 +222,13 @@ def get_identifiers(text,lang,file_id):
                 kw.append(matched_report_number)
         else:
             pass
-        
         if  time is not None:
             matched_time =find_match(time,text)
             if  matched_time is not None:
                 score = len(matched_time) * 2 + score
                 kw.append(matched_time)
         else:
-            pass
-            
+            pass 
         if  pist is not None:
             matched_pist =find_match(pist,text)
             if  matched_pist is not None:
@@ -247,7 +236,6 @@ def get_identifiers(text,lang,file_id):
                 kw.append(matched_pist)
         else:
             pass
-            
         find_list.append([id,score,kw])
     
     max_score = max(find_list, key=lambda x: x[1])
@@ -287,9 +275,7 @@ def ner(row):
             continue
     return row
 
-
 linked_to_aviation = decisions[decisions.event_id.notna()].drop(columns=["text"])
-
 linked_to_aviation = linked_to_aviation.apply(ner, axis=1)
 datatoexcel1 = pd.ExcelWriter('linked_to_aviation.xlsx')
 linked_to_aviation.to_excel(datatoexcel1,header=True, index=True)
@@ -302,7 +288,6 @@ trains_and_ships['location_list'] = trains_and_ships.apply(
     lambda trains_and_ships: clean_data(trains_and_ships.location), axis=1)
 trains_and_ships['details_list'] = trains_and_ships.apply(
     lambda trains_and_ships: clean_data(trains_and_ships.type), axis=1)
-
 
 trains_and_ships['time_pattern'] = trains_and_ships.apply(
     lambda trains_and_ships: extraxt_content_identifier(trains_and_ships.content,reg_query["time"]), axis=1)
@@ -319,7 +304,6 @@ def get_identifiers_train(text,lang,file_id):
         score = 0
         kw = []
         id = row[1]["id"]  
-        
         date = row[1]["event_date"]
         date_key = convert_date(date,lang)
         loc = row[1]["location_list"]
@@ -331,12 +315,10 @@ def get_identifiers_train(text,lang,file_id):
         if  matched_date is not None:
             score = len(matched_date) * 2 + score
             kw.append(matched_date)
-        
         matched_loc =find_match(loc,text)
         if  matched_loc is not None:
             score = len(matched_loc) * 1 + score
             kw.append(matched_loc)
-            
         if  report_number is not None:
             matched_report_number =find_match(report_number,text)
             if  matched_report_number is not None:
@@ -344,7 +326,6 @@ def get_identifiers_train(text,lang,file_id):
                 kw.append(matched_report_number)
         else:
             pass
-        
         if  time is not None:
             matched_time =find_match(time,text)
             if  matched_time is not None:
@@ -352,10 +333,8 @@ def get_identifiers_train(text,lang,file_id):
                 kw.append(matched_time)
         else:
             pass
-            
         if  wagon is not None:
             matched_pist =find_match(wagon,text)
-            
             if  matched_pist is None:
                 new_wagon =[]
                 for item in wagon:
@@ -368,7 +347,6 @@ def get_identifiers_train(text,lang,file_id):
                 kw.append(matched_pist)
         else:
             pass
-            
         find_list.append([id,score,kw])
     
     max_score = max(find_list, key=lambda x: x[1])
@@ -379,7 +357,6 @@ def get_identifiers_train(text,lang,file_id):
 
 decisions['event_id'] = decisions.apply(
     lambda decision: get_identifiers_train(decision.text, decision.language,decision.file_id), axis=1)
-
 
 linked_to_train = decisions[decisions.event_id.notna()].drop(columns=["text"])
 linked_to_train= linked_to_train.apply(ner, axis=1)
