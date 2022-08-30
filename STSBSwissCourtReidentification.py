@@ -12,6 +12,15 @@ nltk.download('punkt')
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 
+import spacy
+from spacy import displacy
+from spacy.matcher import Matcher
+
+de_nlp = spacy.load("nl_core_news_md")
+fr_nlp= spacy.load("fr_core_news_sm")
+it_nlp= spacy.load("it_core_news_sm")
+en_nlp= spacy.load("en_core_web_sm")
+
 DATA_DIR = Path('data')
 
 """
@@ -133,11 +142,17 @@ aviation['location_list'] = aviation.apply(
     lambda aviation: clean_data(aviation.location), axis=1)
 aviation['details_list'] = aviation.apply(
     lambda aviation: clean_data(aviation.details), axis=1)
-  
+
+
+
+
+
+
 #Extraxt Time,pist and report numbers from content of events. I used these as indirect identifier. 
 reg_query ={
     "time": r'[0-9]{2}:[0-9]{2}:?[0-9]*',
     "pist":  r'\sPiste\s[0-9]+',
+    "wagon":  r'\swagen\s[0-9]+|\swagon\sn°\s[0-9]+',
     "report_number": r'Schlussbericht Nr.\s*[0-9]+|Rapport final n°\s[0-9]+',
 }
 
@@ -244,89 +259,131 @@ def get_identifiers(text,lang,file_id):
 decisions['event_id'] = decisions.apply(
     lambda decision: get_identifiers(decision.text, decision.language,decision.file_id), axis=1)
 
-#Delete text columns from decisions
-decisions = decisions.drop(columns=["text"])
-
-
-useless_words = ["Proprietario","Immatrikulation"," Besatzung","de l’accident","Luogo","Type d’aéronef ","Pays","Commandant de bord","Haupthalter","Prüfer","Hersteller","Eintragungsstaat","1.2.2.1.1","1.2.1.1.1","Allgemeines","Luftfahrzeug","Halter","Eigentümer","Pilot",
-                "Passagiere","Ort","Datum und Zeit","Betriebsart","Fahrtphase","Startort","Zielort","Ziel","Koordinate",
-                "Aéronef","Exploitant","Immatriculation","Indicatif d’appel","Constructeur","Propriétaire","Pilote","Lizenz",
-                "Kommandant","Ausweis","Copilot","Examiner","Flugverkehrsleiter","Dienstbeginn","Coordonnées","Licence",
-                "Lieu","Dommages aux personnes","Point de destination","Contrôleur de la circulation aérienne","Jours","muster","Fase di volo",
-                "Luogo di destinazione","Luogo di decollo","Personne","Person","Date et heure",":"]
-
-search_query = {
-    "de":{"Aircraft":r"Luftfahrzeug.{1,100}Halter|Luftfahrzeug.{1,100}Eintragungsstaat|Luftfahrzeug.{1,100}Haupthalter",
-         "Operator":r"Halter.{1,100}Eigentümer|Halter.{1,100}Hersteller|Haupthalter.{1,100}Haupteigentümer",
-          "Owner":r"Eigentümer.{1,100}Halter|Haupteigentümer.{1,100}Prüfer|Eigentümer.{1,110}Pilot|Eigentümer.{1,100}Relevante|Eigentümer.{1,100}Besatzung\b",
-          "Captain": r"Kommandant.{1,100}Lizenz",
-          "Pilot": r"Pilot.{1,100}Ausweis",
-          "Copilot": r"Pilot.{1,100}Ausweis|Pilot.{1,100}Passagiere",
-          "Examiner": r"Prüfer.{1,100}Ausweis",
-          "Staff of control services": r"Flugverkehrsleiter\s+[a-zA-Z,]*[0-9]{4}",
-          "Aircraft_type": r"Betriebsart.{1,100}\s{2,50}Fahrtphase",
-          "Point of departure": r"Startort.{1,100}\s{2,50}Ziel",
-          "Point of landing": r"Ziel.{1,100}\s{2,50}",
-        },
-    "fr":{"Aircraft":r"Aéronef\s.{1,100}Exploitant|Immatriculation.{1,100}Indicatif d’appel|Immatriculation.{1,100}Lieu",
-         "Operator":r"Exploitant.{1,110}Propriétaire|Exploitant.{1,100}Constructeur",
-          "Owner":r"Propriétaire.{1,120}Pilote|Propriétaire.{1,100}Exploitant",
-          "Captain": r"Commandant.{1,100}Licence",
-          "Pilot": r"Pilote.{1,100}\s{2,50}Licence",
-          "Copilot": r"Copilote.{1,100}\s{2,50}Licence",
-          "Examiner": r"Prüfer.{1,100}\s{2,50}Ausweis",
-          "Staff of control services": r"Contrôleur.{1,200}\s{2,50}Jours",
-          "Aircraft_type": r"Type d’exploitation.{1,100}\s{2,50}Règles de vol",
-          "Point of departure": r"Point de départ.{1,100}\s{2,50}Point de destination",
-          "Point of landing": r"Point de destination\s.{1,100}\s{2,50}Dommages aux personnes",
-        },
-    "it":{"Aircraft":r"Aeromobile.{1,100}Esercente",
-         "Operator":r"Esercente.{1,100}Proprietario",
-          "Owner":r"Proprietario.{1,100}Pilota",
-          "Captain": r"Kommandant.{1,100}Lizenz",
-          "Pilot": r"Pilota.{1,100}\s{2,50}Licenza",
-          "Copilot": r"Pilot.{1,100}\s{2,50}[Ausweis,Passagiere]$|Copilot\s.{1,100}\s{2,50}Lizenz",
-          "Examiner": r"Prüfer\s.{1,100}\s{2,50}Ausweis",
-          "Staff of control services": r"Contrôleur.{1,200}\s{2,50}Jours",
-          "Aircraft_type": r"Tipo di volo.{1,100}Regole di volo",
-          "Point of departure": r"Luogo di decollo.{1,100}\s{2,50}Luogo di destinazione",
-          "Point of landing": r"Luogo di destinazione.{1,100}\s{2,50}Fase di volo",
-        },
-}
-
-#retrieve more information in events report and assign to decisions
-def re_identify(row):
-    r = re.compile('|'.join(useless_words),re.IGNORECASE)
+#after linking each decision with one event, in ner() function I extraxt name entities from content of event to facilate name finding.
+def ner(row):
+    
     id =int(row["event_id"])
+    lang = (row["language"])
     content= list(aviation.iloc[[id]]["content"])[0]
+    
     for i in range(0,len(content)):
-        lang =content[i]["lang"]
-        if lang == "en":
-            pass
-        else:
+        entities =[]
+        content_lang =content[i]["lang"]
+        if content_lang == lang:
+        
             doc = content[i]["content"]
-            row["Event date"] = list(aviation.iloc[[id]]["event_date"])
-            row["Location"]= list(aviation.iloc[[id]]["location"])
-            row["Event Url"] = list(aviation.iloc[[id]]["url"])
-            row["Aircraft"]=r.sub("", str(re.findall(search_query[lang]["Aircraft"],doc)))  
-            row["Operator"]=r.sub("", str(re.findall(search_query[lang]["Operator"],doc)))
-            row["Owner"]=r.sub("", str(re.findall(search_query[lang]["Owner"],doc)))
-            row["Captain"]= r.sub("", str(re.findall(search_query[lang]["Captain"],doc)))
-            row["Pilot"]= r.sub("", str(re.findall(search_query[lang]["Pilot"],doc)))
-            row["Copilot"]= r.sub("", str(re.findall(search_query[lang]["Copilot"],doc)))
-            row["Examiner"]= r.sub("", str(re.findall(search_query[lang]["Examiner"],doc)))
-            row["Staff of control services"]= r.sub("", str(re.findall(search_query[lang]["Staff of control services"],doc)))
-            row["Aircraft_type"]= r.sub("", str(re.findall(search_query[lang]["Aircraft_type"],doc)))
-            row["Point of departure"]= r.sub("", str(re.findall(search_query[lang]["Point of departure"],doc)))
-            row["Point of landing"]= r.sub("", str(re.findall(search_query[lang]["Point of landing"],doc)))
+            if lang == "de": 
+                e_doc=de_nlp(doc)
+            elif lang == "fr": 
+                e_doc=fr_nlp(doc)
+            elif lang == "it": 
+                e_doc=it_nlp(doc)
+            elif lang == "en": 
+                e_doc=en_nlp(doc)
+            for ent in e_doc.ents:
+                entities.append(ent.text)
+            row["entities"] = entities   
+        else:
+            continue
     return row
 
-non_linked = decisions[decisions.event_id.isna()]
 
-linked = decisions[decisions.event_id.notna()]
-re_identified = linked.apply(re_identify, axis=1)
+linked_to_aviation = decisions[decisions.event_id.notna()].drop(columns=["text"])
 
-#Save re_identified decisions in exels file
-datatoexcel = pd.ExcelWriter('re-swisscourt.xlsx')
-re_identified.to_excel(datatoexcel,header=True, index=True)
-datatoexcel.save()
+linked_to_aviation = linked_to_aviation.apply(ner, axis=1)
+datatoexcel1 = pd.ExcelWriter('linked_to_aviation.xlsx')
+linked_to_aviation.to_excel(datatoexcel1,header=True, index=True)
+datatoexcel1.save()
+
+decisions = decisions[decisions.event_id.isna()]
+
+#the same process for train data
+trains_and_ships['location_list'] = trains_and_ships.apply(
+    lambda trains_and_ships: clean_data(trains_and_ships.location), axis=1)
+trains_and_ships['details_list'] = trains_and_ships.apply(
+    lambda trains_and_ships: clean_data(trains_and_ships.type), axis=1)
+
+
+trains_and_ships['time_pattern'] = trains_and_ships.apply(
+    lambda trains_and_ships: extraxt_content_identifier(trains_and_ships.content,reg_query["time"]), axis=1)
+
+trains_and_ships['wagon_pattern'] = trains_and_ships.apply(
+    lambda trains_and_ships: extraxt_content_identifier(trains_and_ships.content,reg_query["wagon"]), axis=1)
+
+trains_and_ships['report_number_pattern'] = trains_and_ships.apply(
+    lambda trains_and_ships: extraxt_content_identifier(trains_and_ships.content,reg_query["report_number"]), axis=1)
+
+def get_identifiers_train(text,lang,file_id):
+    find_list = []
+    for row in trains_and_ships.iterrows():
+        score = 0
+        kw = []
+        id = row[1]["id"]  
+        
+        date = row[1]["event_date"]
+        date_key = convert_date(date,lang)
+        loc = row[1]["location_list"]
+        time = row[1]['time_pattern']
+        wagon = row[1]['wagon_pattern']
+        report_number = row[1]['report_number_pattern']
+        
+        matched_date =find_match(date_key,text)
+        if  matched_date is not None:
+            score = len(matched_date) * 2 + score
+            kw.append(matched_date)
+        
+        matched_loc =find_match(loc,text)
+        if  matched_loc is not None:
+            score = len(matched_loc) * 1 + score
+            kw.append(matched_loc)
+            
+        if  report_number is not None:
+            matched_report_number =find_match(report_number,text)
+            if  matched_report_number is not None:
+                score = len(matched_report_number) * 3 + score
+                kw.append(matched_report_number)
+        else:
+            pass
+        
+        if  time is not None:
+            matched_time =find_match(time,text)
+            if  matched_time is not None:
+                score = len(matched_time) * 2 + score
+                kw.append(matched_time)
+        else:
+            pass
+            
+        if  wagon is not None:
+            matched_pist =find_match(wagon,text)
+            
+            if  matched_pist is None:
+                new_wagon =[]
+                for item in wagon:
+                    new_wagon.append(item.replace('n°','n&#176;'))
+   
+            matched_pist =find_match(new_wagon,text)   
+            if  matched_pist is not None:    
+                
+                score = len(matched_pist) * 1 + score
+                kw.append(matched_pist)
+        else:
+            pass
+            
+        find_list.append([id,score,kw])
+    
+    max_score = max(find_list, key=lambda x: x[1])
+    if max_score[1] > 3:
+        return max_score[0]
+    else:
+        return None
+
+decisions['event_id'] = decisions.apply(
+    lambda decision: get_identifiers_train(decision.text, decision.language,decision.file_id), axis=1)
+
+
+linked_to_train = decisions[decisions.event_id.notna()].drop(columns=["text"])
+linked_to_train= linked_to_train.apply(ner, axis=1)
+
+datatoexcel2 = pd.ExcelWriter('linked_to_train.xlsx')
+linked_to_train.to_excel(datatoexcel2,header=True, index=True)
+datatoexcel2.save()
