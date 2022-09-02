@@ -25,8 +25,6 @@ search_queries = {
            "noticeNumber": r"n\.? della pubblicazione|n\.? di notificazione|pubblicazione simap n\.?"},
 }
 
-# TODO contractor auch rausholen bei re-identifizierung (beschwerdegegner)
-
 """
 Why are there so many more german relevant decisions than french ones?
 vielleicht entfernen Gerichtsschreiber die Meldungsnummer, Im Kanton Zürich bspw. werden Meldungsnummern des Amtblattes erwähnt
@@ -231,6 +229,8 @@ def make_report(re_identified: DataFrame, decisions: DataFrame, language: str):
     bidder_aggregate = bidder_aggregate.rename(
         columns={'count': '# Re-Identifications', 'sum': 'Sum (M CHF)', 'mean': 'Mean (M CHF)'}, level=1)
     bidder_aggregate.to_csv(f"results/{language}_bidder_aggregate.csv")
+
+    # TODO we could also optionally discuss the development over the years
 
 
 make_report(re_identified, decisions, 'all')
